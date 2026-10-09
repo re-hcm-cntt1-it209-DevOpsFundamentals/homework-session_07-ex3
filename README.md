@@ -1,69 +1,42 @@
-# Bài 3: Cấu hình tường lửa UFW và chuẩn đoán cổng mạng
+# Bài 3: Thiết lập Cơ sở dữ liệu và Tự cấu hình dịch vụ Systemd cho Spring Boot
 
-## Mục tiêu
-- Cấu hình tường lửa UFW chặn và mở cổng dịch vụ chính xác.
-- Sử dụng các công cụ chẩn đoán mạng CLI (`netstat`, `ss`, `curl`, `nc`/`nmap`) để kiểm tra trạng thái cổng kết nối.
-
----
-
-## 1. Các Bước Cấu hình UFW
-
-```bash
-# Đặt chính sách mặc định
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-
-# Mở cổng SSH và HTTP
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-
-# Bật tường lửa UFW
-sudo ufw enable
+## 1. Thiết lập Cơ sở dữ liệu và User
+- Trong MySQL, tạo database và user:
+```sql
+CREATE DATABASE springboot_db;
+CREATE USER 'spring-admin'@'localhost' IDENTIFIED BY 'SpringSecure@123';
+GRANT ALL PRIVILEGES ON springboot_db.* TO 'spring-admin'@'localhost';
+FLUSH PRIVILEGES;
 ```
 
----
-
-## 2. Kiểm tra Cấu hình UFW (`sudo ufw status verbose`)
-
+## 2. Tạo user hệ thống Linux `spring-runner`
 ```bash
-$ sudo ufw status verbose
-Status: active
-Logging: on (low)
-Default: deny (incoming), allow (outgoing), disabled (routed)
-New profiles: skip
-
-To                         Action      From
---                         ------      ----
-22/tcp                     ALLOW IN    Anywhere                  
-80/tcp                     ALLOW IN    Anywhere                  
-22/tcp (v6)                ALLOW IN    Anywhere (v6)             
-80/tcp (v6)                ALLOW IN    Anywhere (v6)             
+sudo useradd -r -s /sbin/nologin spring-runner
 ```
 
----
+## 3. Tệp dịch vụ `spring-app.service`
+Tệp cấu hình được đặt tại `/etc/systemd/system/spring-app.service`.
+Đã bao gồm cấu hình chạy ngầm ứng dụng dưới quyền user `spring-runner`, khởi động lại sau 10 giây nếu bị lỗi.
 
-## 3. Chẩn đoán Cổng Mạng Lắng nghe (`ss -tuln`)
-
-Chạy lệnh tra cứu socket lắng nghe trên server:
+Kích hoạt và chạy dịch vụ:
 ```bash
-$ sudo ss -tuln
-Netid  State   Recv-Q  Send-Q   Local Address:Port   Peer Address:Port  Process
-tcp    LISTEN  0       511            0.0.0.0:80          0.0.0.0:*      
-tcp    LISTEN  0       4096           0.0.0.0:22          0.0.0.0:*      
+sudo systemctl daemon-reload
+sudo systemctl enable spring-app.service
+sudo systemctl start spring-app.service
 ```
 
-### Thử nghiệm kết nối HTTP bằng `curl -I`:
+## 4. Kết quả kiểm tra
+
+1. **Trạng thái dịch vụ:**
 ```bash
-$ curl -I http://localhost
-HTTP/1.1 200 OK
-Server: nginx/1.18.0 (Ubuntu)
-Date: Wed, 07 Oct 2026 11:20:00 GMT
-Content-Type: text/html
-Content-Length: 612
+sudo systemctl status spring-app.service
 ```
+*(Học viên chèn ảnh chụp màn hình trạng thái active (running) tại đây)*
+![Service Status Screenshot](./service_status.png)
 
----
-
-## 4. Kết luận
-- Tường lửa UFW đã bảo vệ an toàn cho máy chủ, chỉ mở đúng 2 cổng 22 (SSH) và 80 (HTTP).
-- Kiểm tra bằng `ss -tuln` và `curl` xác nhận dịch vụ web đang hoạt động bình thường.
+2. **Cổng lắng nghe của ứng dụng:**
+```bash
+ss -tlnp | grep 8082
+```
+*(Học viên chèn ảnh chụp màn hình port 8082 đang được lắng nghe bởi ứng dụng Java của spring-runner tại đây)*
+![Listening Port Screenshot](./listening_port.png)
